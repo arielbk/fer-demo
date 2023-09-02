@@ -6,8 +6,6 @@ import cv2
 learn = load_learner("model.pkl")
 print("vocab", learn.dls.vocab)
 
-categories = ("angry", "disgust", "fear", "happy", "neutral", "sad", "surprise")
-
 
 def preprocess_webcam_image(img_array):
     # Convert to grayscale
@@ -34,27 +32,41 @@ def preprocess_webcam_image(img_array):
     # Normalize if necessary (e.g., scale pixel values to [0, 1])
     normalized_face = resized_face / 255.0
 
-    return normalized_face
+    # Convert back to a 3-channel image
+    processed_img_rgb = np.stack([normalized_face] * 3, axis=-1)
+    processed_img_rgb = (processed_img_rgb * 255).astype(np.uint8)
+
+    return processed_img_rgb
 
 
 def classify_img(img):
     processed_img = preprocess_webcam_image(img)
     pred, idx, probs = learn.predict(processed_img)
 
+    parsed_probs = dict(zip(learn.dls.vocab, map(float, probs)))
     # Debugging print statement
-    print(f"Predicted: {pred}, Probs: {probs}")
+    print(parsed_probs)
 
-    return {category: prob.item() for category, prob in zip(categories, probs)}
+    # Return both the prediction dictionary and the processed image
+    return (
+        processed_img,
+        parsed_probs,
+    )
 
 
-image = gr.inputs.Image(shape=(1000, 1000))
+# image = gr.inputs.Image(shape=(192, 192))
+image = gr.Image(source="webcam", shape=(224, 224), streaming=True, interactive=True)
 label = gr.outputs.Label()
-# examples = ["angry.jpg", "sad.jpg"]
+examples = ["angry.jpg", "happy.jpg"]
 
 iface = gr.Interface(
     fn=classify_img,
-    inputs=gr.Image(source="webcam", streaming=True),
-    outputs=label,
-    live=True,
+    inputs=image,
+    outputs=[
+        gr.outputs.Image(type="numpy", label="Processed Image").style(height=224),
+        gr.outputs.Label(),
+    ],
+    examples=examples,
 )
+iface.dependencies[0]["show_progress"] = False
 iface.launch(inline=False)
